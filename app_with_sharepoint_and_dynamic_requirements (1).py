@@ -279,11 +279,13 @@ data.append({
 })
 
     df = pd.DataFrame(data)
+    if not df.empty:
+        df = df.sort_values(
+            ["Level (Jr/Mid/Sr)", "Est. Years", "Total Score"],
+            ascending=[True, False, False]
+        ).reset_index(drop=True)
 if not df.empty:
-    df = df.sort_values(
         ["Level (Jr/Mid/Sr)", "Est. Years", "Total Score"],
-        ascending=[True, False, False]
-    ).reset_index(drop=True)
     st.dataframe(df)
 
     if not df.empty:
@@ -301,5 +303,3 @@ if not df.empty:
             st.success("Excel uploaded to SharePoint!")
 
  
-
-
