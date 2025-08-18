@@ -9,6 +9,20 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 from datetime import date
+from office365.sharepoint.client_context import ClientContext
+from office365.runtime.auth.user_credential import UserCredential
+
+SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
+
+USERNAME = st.secrets["sharepoint"]["username"]
+PASSWORD = st.secrets["sharepoint"]["password"]
+
+ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
+
+# test quickly
+ctx.load(ctx.web)
+ctx.execute_query()
+st.write("✅ Connected to SharePoint")
 
 # ========== CONFIG ==========
 SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
