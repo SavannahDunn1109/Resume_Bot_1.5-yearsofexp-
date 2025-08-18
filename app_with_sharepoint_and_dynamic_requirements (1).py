@@ -1,6 +1,6 @@
 import streamlit as st
 from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.authentication_context import AuthenticationContext
+from office365.runtime.auth.user_credential import UserCredential
 from office365.sharepoint.files.file import File
 import io
 import pandas as pd
@@ -9,15 +9,45 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 from datetime import date
-from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.user_credential import UserCredential
 
-SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
+# -----------------------------
+# CONFIG: set your site URL once
+# -----------------------------
+SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"   # <-- fill this in exactly
 
-USERNAME = st.secrets["sharepoint"]["username"]
-PASSWORD = st.secrets["sharepoint"]["password"]
+st.set_page_config(page_title="Resume Bot", page_icon="📄")
+st.title("📄 Resume Bot")
 
-ctx = ClientContext(SITE_URL).with_credentials(UserCredential(USERNAME, PASSWORD))
+# -----------------------------
+# 1) CONNECT (runs only on click)
+# -----------------------------
+def connect_to_sharepoint():
+    username = st.secrets["sharepoint"]["username"]
+    password = st.secrets["sharepoint"]["password"]
+    ctx = ClientContext(SITE_URL).with_credentials(UserCredential(username, password))
+    # quick ping so we fail fast if auth is bad
+    ctx.load(ctx.web)
+    ctx.execute_query()
+    return ctx
+
+# Keep connection in session so you can reuse it
+if "ctx" not in st.session_state:
+    st.session_state.ctx = None
+
+if st.button("🔌 Connect to SharePoint", disabled=st.session_state.ctx is not None):
+    try:
+        with st.spinner("Connecting..."):
+            st.session_state.ctx = connect_to_sharepoint()
+        st.success("✅ Connected to SharePoint")
+    except Exception as e:
+        st.error(f"❌ Connect failed: {e}")
+
+# ---------------------------------------
+# 2) LIST FILES (only after you connect)
+# ---------------------------------------
+def list_resumes():
+    folder_url = "/sites/Recruitin_
+
 
 # test quickly
 ctx.load(ctx.web)
