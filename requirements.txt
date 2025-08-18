@@ -4,3 +4,5 @@ openpyxl
 python-docx
 PyPDF2
 Office365-REST-Python-Client
+office365-rest-python-client==<the-previous-version>
+
