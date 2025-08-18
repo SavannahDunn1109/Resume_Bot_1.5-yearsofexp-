@@ -1,8 +1,12 @@
-streamlit
-pandas
-openpyxl
-python-docx
-PyPDF2
-Office365-REST-Python-Client
-office365-rest-python-client==<the-previous-version>
+streamlit==1.37.1
+office365-rest-python-client==2.5.17
+msal==1.30.0
+python-docx==1.1.2
+pypdf2==3.0.1
+pdfminer.six==20231228
+pandas==2.2.2
+openpyxl==3.1.5
+requests==2.32.3
+tenacity==8.5.0
+
 
