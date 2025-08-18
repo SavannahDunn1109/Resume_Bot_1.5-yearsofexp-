@@ -9,30 +9,25 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 from datetime import date
+# put this after your imports
+SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
 
-# -----------------------------
-# CONFIG: set your site URL once
-# -----------------------------
-SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"   # <-- fill this in exactly
-
-st.set_page_config(page_title="Resume Bot", page_icon="📄")
-st.title("📄 Resume Bot")
-
-# -----------------------------
-# 1) CONNECT (runs only on click)
-# -----------------------------
 def connect_to_sharepoint():
     username = st.secrets["sharepoint"]["username"]
     password = st.secrets["sharepoint"]["password"]
     ctx = ClientContext(SITE_URL).with_credentials(UserCredential(username, password))
-    # quick ping so we fail fast if auth is bad
     ctx.load(ctx.web)
     ctx.execute_query()
     return ctx
 
-# Keep connection in session so you can reuse it
-if "ctx" not in st.session_state:
-    st.session_state.ctx = None
+st.title("📄 Resume Bot")
+
+if st.button("🔌 Connect to SharePoint"):
+    try:
+        ctx = connect_to_sharepoint()
+        st.success("✅ Connected!")
+    except Exception as e:
+        st.error(f"❌ Connect failed: {e}")
 
 if st.button("🔌 Connect to SharePoint", disabled=st.session_state.ctx is not None):
     try:
