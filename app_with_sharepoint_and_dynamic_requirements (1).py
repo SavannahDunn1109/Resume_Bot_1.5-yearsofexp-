@@ -16,16 +16,27 @@ LIBRARY = "Shared Documents"
 FOLDER = "Active Resumes"
 
 # ========== AUTH ==========
+from office365.runtime.auth.user_credential import UserCredential
+from office365.sharepoint.client_context import ClientContext
+
 @st.cache_resource
 def connect_to_sharepoint():
-    ctx_auth = AuthenticationContext(SITE_URL)
-    if not ctx_auth.acquire_token_for_user(
-        st.secrets["sharepoint"]["username"],
-        st.secrets["sharepoint"]["password"]
-    ):
-        st.error("Authentication failed")
-        return None
-    return ClientContext(SITE_URL, ctx_auth)
+    try:
+        username = st.secrets["sharepoint"]["username"]
+        password = st.secrets["sharepoint"]["password"]
+
+        # Modern user creds (no cookie scraping)
+        creds = UserCredential(username, password)
+        ctx = ClientContext(SITE_URL).with_credentials(creds)
+
+        # Prove the token works
+        ctx.load(ctx.web)
+        ctx.execute_query()
+        return ctx
+    except Exception as e:
+        # Surface the true reason in Streamlit
+        raise RuntimeError(f"SharePoint auth failed: {e}")
+
 
 # ========== FILE HELPERS ==========
 def download_file(ctx, file_url):
