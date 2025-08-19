@@ -54,4 +54,280 @@ def _get_fedauth_rtfa():
 def connect_with_browser_cookies():
     """
     Use your current browser session (MFA already done) to authenticate Office365 calls.
-    Run this ONLY on your local machine (same OS user, no
+    Run this ONLY on your local machine (same OS user, non-incognito window).
+    """
+    fedauth, rtfa = _get_fedauth_rtfa()
+    if not (fedauth and rtfa):
+        raise RuntimeError(
+            "No SharePoint cookies found.\n"
+            "Open https://eleven090.sharepoint.com/sites/Recruiting in Chrome/Edge, "
+            "sign in (non-incognito) and complete MFA, then click Connect again."
+        )
+
+    ctx = ClientContext(SITE_URL)
+
+    # Inject Cookie header on every request the SDK makes
+    def _auth(request):
+        request.set_header("Cookie", f"FedAuth={fedauth}; rtFa={rtfa}")
+
+    # Override the library's internal auth hook
+    ctx.authentication_context._authenticate = _auth
+
+    # Fail fast if cookies are stale
+    ctx.web.get().execute_query()
+    return ctx
+
+# ---------- FILE HELPERS ----------
+def download_file(ctx: ClientContext, file_url: str) -> io.BytesIO:
+    response = File.open_binary(ctx, file_url)
+    return io.BytesIO(response.content)
+
+def extract_text_from_pdf(file_bytes: io.BytesIO) -> str:
+    text = ""
+    reader = PdfReader(file_bytes)
+    for page in reader.pages:
+        page_text = page.extract_text()
+        if page_text:
+            text += page_text + "\n"
+    return text
+
+def extract_text_from_docx(file_bytes: io.BytesIO) -> str:
+    doc = Document(file_bytes)
+    return "\n".join(p.text for p in doc.paragraphs)
+
+# ---------- EXPERIENCE HELPERS ----------
+MONTHS = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9, "oct": 10, "october": 10,
+    "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+
+def _mk_date(y: int, m: int) -> date:
+    m = min(max(1, m), 12)
+    return date(int(y), int(m), 15)
+
+def _parse_month(tok: str):
+    return MONTHS.get(tok.strip().lower()) if tok else None
+
+def _parse_year(tok: str):
+    if not tok: return None
+    m = re.match(r"(19|20)\d{2}$", tok.strip())
+    return int(m.group(0)) if m else None
+
+def _present_to_date() -> date:
+    today = date.today()
+    return date(today.year, today.month, 15)
+
+def _extract_date_ranges(text: str):
+    t = text.replace("\u2013", "-").replace("\u2014", "-")
+    ranges = []
+
+    pat_month_year = re.compile(
+        r"\b(?P<m1>[A-Za-z]{3,9})\s+(?P<y1>(?:19|20)\d{2})\s*[-to]+\s*(?P<m2>Present|Current|[A-Za-z]{3,9})\s*(?P<y2>(?:19|20)\d{2})?\b",
+        flags=re.I
+    )
+    for m in pat_month_year.finditer(t):
+        m1 = _parse_month(m.group("m1")); y1 = _parse_year(m.group("y1"))
+        m2tok = m.group("m2"); y2tok = m.group("y2")
+        if m1 and y1:
+            start = _mk_date(y1, m1)
+            if m2tok and m2tok.lower() in ("present", "current"):
+                end = _present_to_date()
+            else:
+                m2 = _parse_month(m2tok); y2 = _parse_year(y2tok) if y2tok else None
+                if not (m2 and y2): continue
+                end = _mk_date(y2, m2)
+            if end > start: ranges.append((start, end))
+
+    pat_year_year = re.compile(
+        r"\b(?P<y1>(?:19|20)\d{2})\s*[-to]+\s*(?P<y2>Present|Current|(?:19|20)\d{2})\b",
+        flags=re.I
+    )
+    for m in pat_year_year.finditer(t):
+        y1 = _parse_year(m.group("y1")); y2tok = m.group("y2")
+        if not y1: continue
+        start = _mk_date(y1, 6)
+        if y2tok.lower() in ("present", "current"):
+            end = _present_to_date()
+        else:
+            y2 = _parse_year(y2tok); 
+            if not y2: continue
+            end = _mk_date(y2, 6)
+        if end > start: ranges.append((start, end))
+
+    pat_mmyyyy = re.compile(
+        r"\b(?P<m1>0?[1-9]|1[0-2])/(?P<y1>(?:19|20)\d{2})\s*[-to]+\s*(?P<m2>0?[1-9]|1[0-2])/(?P<y2>(?:19|20)\d{2}|Present|Current)\b",
+        flags=re.I
+    )
+    for m in pat_mmyyyy.finditer(t):
+        m1 = int(m.group("m1")); y1 = _parse_year(m.group("y1"))
+        if not (y1 and 1 <= m1 <= 12): continue
+        start = _mk_date(y1, m1)
+        y2raw = m.group("y2")
+        if y2raw.lower() in ("present", "current"):
+            end = _present_to_date()
+        else:
+            m2 = int(m.group("m2")); y2 = _parse_year(y2raw)
+            if not (y2 and 1 <= m2 <= 12): continue
+            end = _mk_date(y2, m2)
+        if end > start: ranges.append((start, end))
+
+    if not ranges: return []
+    ranges.sort(key=lambda r: r[0])
+    merged = [ranges[0]]
+    for s, e in ranges[1:]:
+        last_s, last_e = merged[-1]
+        if s <= last_e:
+            merged[-1] = (last_s, max(last_e, e))
+        else:
+            merged.append((s, e))
+    return merged
+
+def _years_from_ranges(text: str) -> float:
+    merged = _extract_date_ranges(text)
+    total_months = 0
+    for s, e in merged:
+        diff = (e.year - s.year) * 12 + (e.month - s.month)
+        total_months += max(0, diff)
+    return round(total_months / 12.0, 1)
+
+def _years_from_phrases(text: str) -> int:
+    best = 0
+    for m in re.finditer(r"\b([1-4]?\d)\s*\+?\s*[- ]?\s*(?:years?|yrs?)\b", text, flags=re.I):
+        best = max(best, int(m.group(1)))
+    return best
+
+def estimate_years_experience(text: str):
+    yrs_ranges = _years_from_ranges(text)
+    yrs_phrases = _years_from_phrases(text)
+    if yrs_ranges >= 0.5:
+        return yrs_ranges, "ranges"
+    return float(yrs_phrases), "phrases"
+
+def classify_level(years: float, jr_max: int, mid_max: int) -> str:
+    if years <= jr_max: return "Junior"
+    elif years <= mid_max: return "Mid"
+    else: return "Senior"
+
+# ---------- SCORING ----------
+st.title("📄 Resume Scorer from SharePoint (Local Demo)")
+
+st.sidebar.markdown("### Run mode")
+mode = st.sidebar.radio(
+    "Choose how to connect",
+    ["Local (browser cookies)", "Demo (no SharePoint)"],
+    index=0
+)
+
+# Requirements file first (unlocks scoring)
+uploaded_req_file = st.file_uploader("📄 Upload Requirements (.txt)", type=["txt"])
+KEYWORDS = []
+if uploaded_req_file:
+    req_lines = uploaded_req_file.read().decode("utf-8").splitlines()
+    for line in req_lines:
+        line = line.strip()
+        if line and not any(line.startswith(prefix) for prefix in ("🧠","💼","🛡","⚙️","☁️","👥","🎯","🧾","🧩")):
+            if not line.endswith(":"):
+                KEYWORDS.append(line)
+    st.success(f"✅ Loaded {len(KEYWORDS)} keywords.")
+else:
+    st.warning("⚠️ Please upload a requirements .txt file to enable scoring.")
+
+st.subheader("⚙️ Scoring & Filters")
+exp_points_per_year = st.number_input("Points per year of experience", 0, 50, 5, 1)
+jr_max = st.number_input("Max years for JUNIOR", 0, 10, 2, 1)
+mid_max = st.number_input("Max years for MID", jr_max, 25, 6, 1)
+enforce_min = st.checkbox("Enforce minimum years of experience filter?", value=False)
+min_years_required = st.number_input("Minimum years (hide resumes below this)", 0, 30, 3, 1)
+
+def score_resume(text: str):
+    kw_score = 0
+    found_keywords = []
+    lower_text = text.lower()
+    for kw in KEYWORDS:
+        if kw.lower() in lower_text:
+            kw_score += 10
+            found_keywords.append(kw)
+    years, years_source = estimate_years_experience(text)
+    exp_score = years * exp_points_per_year
+    total = kw_score + exp_score
+    return {
+        "years": years,
+        "years_source": years_source,
+        "level": classify_level(years, jr_max, mid_max),
+        "kw_score": kw_score,
+        "exp_score": exp_score,
+        "total": total,
+        "keywords_found": ", ".join(found_keywords),
+    }
+
+# ---------- CONNECT & LOAD ----------
+ctx = None
+if mode == "Local (browser cookies)":
+    if st.button("🔐 Connect using my browser session"):
+        try:
+            with st.spinner("Connecting to SharePoint via browser session..."):
+                ctx = connect_with_browser_cookies()
+            st.session_state.ctx = ctx
+            st.success("✅ Connected to SharePoint (local browser session)")
+        except Exception as e:
+            st.error(f"❌ Connect failed: {e}")
+            st.info("Open the site in Chrome/Edge (non-incognito), sign in & pass MFA, then click again.")
+    ctx = st.session_state.get("ctx")
+
+elif mode == "Demo (no SharePoint)":
+    st.info("🎬 Demo mode: Not connecting to SharePoint. (You can still upload resumes below if you add that feature.)")
+
+data = []
+if mode == "Local (browser cookies)" and ctx:
+    # List and process files from the SharePoint folder
+    folder_url = f"/sites/Recruiting/{LIBRARY}/{FOLDER}"  # absolute server-relative
+    folder = ctx.web.get_folder_by_server_relative_url(folder_url)
+    files = folder.files
+    ctx.load(files)
+    ctx.execute_query()
+
+    st.write(f"📂 Found {len(files)} files in '{FOLDER}'")
+
+    for f in files:
+        name = f.properties.get("Name", "")
+        if not name.lower().endswith((".pdf", ".docx")):
+            continue
+        if not KEYWORDS:
+            # allow connecting first; user can upload keywords afterward
+            continue
+
+        file_url = f.properties["ServerRelativeUrl"]
+        file_bytes = download_file(ctx, file_url)
+
+        text = extract_text_from_pdf(file_bytes) if name.lower().endswith(".pdf") else extract_text_from_docx(file_bytes)
+        result = score_resume(text)
+        if enforce_min and result["years"] < float(min_years_required):
+            continue
+        data.append({
+            "File Name": name,
+            "Est. Years": result["years"],
+            "Level (Jr/Mid/Sr)": result["level"],
+            "Experience Source": result["years_source"],
+            "Keyword Score": result["kw_score"],
+            "Experience Score": result["exp_score"],
+            "Total Score": result["total"],
+            "Keywords Found": result["keywords_found"],
+        })
+
+# ---------- DISPLAY & EXPORT ----------
+if KEYWORDS and data:
+    df = pd.DataFrame(data).sort_values(
+        ["Level (Jr/Mid/Sr)", "Est. Years", "Total Score"],
+        ascending=[True, False, False]
+    ).reset_index(drop=True)
+    st.dataframe(df)
+    out = io.BytesIO()
+    df.to_excel(out, index=False)
+    out.seek(0)
+    st.download_button("📥 Download Excel Report", out, file_name="resume_scores.xlsx")
+elif KEYWORDS and not data and (mode == "Local (browser cookies)" and ctx):
+    st.info("No matching files (pdf/docx) or all entries filtered out by minimum years.")
+elif not KEYWORDS:
+    st.info("Upload a requirements .txt file to enable scoring.")
