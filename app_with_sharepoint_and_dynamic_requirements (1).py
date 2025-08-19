@@ -1,3 +1,9 @@
+import sys, office365, requests, urllib3, cryptography
+st.sidebar.write("Python:", sys.version)
+st.sidebar.write("office365:", office365.__version__)
+st.sidebar.write("requests:", requests.__version__)
+st.sidebar.write("urllib3:", urllib3.__version__)
+st.sidebar.write("cryptography:", cryptography.__version__)
 import streamlit as st
 from office365.sharepoint.client_context import ClientContext
 from office365.runtime.auth.user_credential import UserCredential
