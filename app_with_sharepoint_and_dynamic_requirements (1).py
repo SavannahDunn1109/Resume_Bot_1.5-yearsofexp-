@@ -25,17 +25,16 @@ def connect_to_sharepoint():
         username = st.secrets["sharepoint"]["username"]
         password = st.secrets["sharepoint"]["password"]
 
-        # Modern user creds (no cookie scraping)
         creds = UserCredential(username, password)
         ctx = ClientContext(SITE_URL).with_credentials(creds)
 
-        # Prove the token works
+        # Quick test
         ctx.load(ctx.web)
         ctx.execute_query()
         return ctx
     except Exception as e:
-        # Surface the true reason in Streamlit
-        raise RuntimeError(f"SharePoint auth failed: {e}")
+        st.error(f"❌ SharePoint auth failed: {e}")
+        return None
 
 
 # ========== FILE HELPERS ==========
