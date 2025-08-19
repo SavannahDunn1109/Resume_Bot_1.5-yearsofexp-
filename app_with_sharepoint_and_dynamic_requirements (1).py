@@ -388,6 +388,12 @@ def score_resume(text: str):
 # ========== MAIN STREAMLIT APP ==========
 st.title("📄 Resume Scorer from SharePoint")
 
+st.sidebar.markdown("### Run mode")
+mode = st.sidebar.radio(
+    "Choose how to connect",
+    ["Local (browser cookies)", "Demo (no SharePoint)"],
+    index=0
+)
 ctx = connect_to_sharepoint()
 if ctx:
     folder_url = f"{LIBRARY}/{FOLDER}"
