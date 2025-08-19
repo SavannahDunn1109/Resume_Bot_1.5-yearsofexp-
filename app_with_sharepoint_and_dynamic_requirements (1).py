@@ -13,6 +13,76 @@ import office365
 import office365
 st.write("office365-rest-python-client version:", getattr(office365, "__version__", "unknown"))
 
+# === Local-only cookie-based SharePoint connector ===
+# Works when you run locally and are already signed in to SharePoint in Chrome/Edge.
+import browser_cookie3
+from office365.sharepoint.client_context import ClientContext
+
+SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"  # your site
+
+def _get_fedauth_rtfa():
+    """
+    Try Chrome first, then Edge. Requires that you're signed into SharePoint
+    in a normal (non-incognito) window as the same OS user running this app.
+    """
+    domains_to_check = ("eleven090.sharepoint.com", ".sharepoint.com")
+
+    def find_in_cookiejar(cj):
+        fedauth = rtfa = None
+        for c in cj:
+            if any(c.domain.endswith(d) for d in domains_to_check):
+                n = c.name.lower()
+                if n == "fedauth":
+                    fedauth = c.value
+                elif n == "rtfa":
+                    rtfa = c.value
+        return fedauth, rtfa
+
+    # Try Chrome
+    try:
+        cj = browser_cookie3.chrome(domain_name=".sharepoint.com")
+        fedauth, rtfa = find_in_cookiejar(cj)
+        if fedauth and rtfa:
+            return fedauth, rtfa
+    except Exception:
+        pass
+
+    # Try Edge
+    try:
+        cj = browser_cookie3.edge(domain_name=".sharepoint.com")
+        fedauth, rtfa = find_in_cookiejar(cj)
+        if fedauth and rtfa:
+            return fedauth, rtfa
+    except Exception:
+        pass
+
+    return None, None
+
+def connect_with_browser_cookies():
+    """
+    Use your current browser session (MFA already done) to authenticate Office365 calls.
+    Run this ONLY on your local machine.
+    """
+    fedauth, rtfa = _get_fedauth_rtfa()
+    if not (fedauth and rtfa):
+        raise RuntimeError(
+            "No SharePoint cookies found. Open "
+            "https://eleven090.sharepoint.com/sites/Recruiting in Chrome/Edge, "
+            "sign in and complete MFA, then try again."
+        )
+
+    ctx = ClientContext(SITE_URL)
+
+    # Inject the Cookie header on every request the SDK makes
+    def _auth(request):
+        request.set_header("Cookie", f"FedAuth={fedauth}; rtFa={rtfa}")
+
+    # Override the library's auth hook
+    ctx.authentication_context._authenticate = _auth
+
+    # Sanity check (fail fast if cookies are stale)
+    ctx.web.get().execute_query()
+    return ctx
 
 # ========== CONFIG ==========
 SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
