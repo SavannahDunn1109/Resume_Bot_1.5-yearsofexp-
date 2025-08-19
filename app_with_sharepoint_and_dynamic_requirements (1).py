@@ -1,6 +1,6 @@
 import streamlit as st
 from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.authentication_context import AuthenticationContext
+from office365.runtime.auth.user_credential import UserCredential
 from office365.sharepoint.files.file import File
 import io
 import pandas as pd
@@ -9,6 +9,10 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 from datetime import date
+import office365
+import office365
+st.write("office365-rest-python-client version:", getattr(office365, "__version__", "unknown"))
+
 
 # ========== CONFIG ==========
 SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
@@ -16,24 +20,27 @@ LIBRARY = "Shared Documents"
 FOLDER = "Active Resumes"
 
 # ========== AUTH ==========
-from office365.runtime.auth.user_credential import UserCredential
-from office365.sharepoint.client_context import ClientContext
-
 @st.cache_resource
 def connect_to_sharepoint():
     try:
+        # --- sanity checks ---
         username = st.secrets["sharepoint"]["username"]
         password = st.secrets["sharepoint"]["password"]
+        if not username or not password:
+            raise RuntimeError("Missing Streamlit secrets for [sharepoint].")
 
+        # --- modern user/password auth (no cookies) ---
         creds = UserCredential(username, password)
         ctx = ClientContext(SITE_URL).with_credentials(creds)
 
-        # Quick test
+        # Prove auth works
         ctx.load(ctx.web)
         ctx.execute_query()
+        st.write("🔐 Auth OK. Site title:", ctx.web.properties.get("Title"))
         return ctx
     except Exception as e:
-        st.error(f"❌ SharePoint auth failed: {e}")
+        # make the error visible so we know if it’s MFA/CA or something else
+        st.error(f"❌ SharePoint auth failed: {type(e).__name__}: {e!s}")
         return None
 
 
