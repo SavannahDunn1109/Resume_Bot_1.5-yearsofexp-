@@ -1,11 +1,13 @@
-streamlit==1.37.1
-office365-rest-python-client==2.6.2
-msal==1.30.0
-python-docx==1.1.2
-pypdf2==3.0.1
-pdfminer.six==20231228
-pandas==2.2.2
+streamlit==1.48.1
+pandas==2.3.1
 openpyxl==3.1.5
-requests==2.32.3
-tenacity==8.5.0
+PyPDF2==3.0.1
+python-docx==1.2.0
+office365-rest-python-client==<the version from the log>
+requests==<the version from the log>
+urllib3==<the version from the log>
+cryptography==<the version from the log>
+lxml==<the version from the log>
+
+
 
