@@ -60,10 +60,8 @@ def connect_with_browser_cookies():
             "No SharePoint cookies found.\n"
             "Open the site in Chrome/Edge (non-incognito), sign in and pass MFA, then try again."
         )
-
-   ctx = None
-
-if mode == "Local (browser cookies)":
+        ctx = None
+    if mode == "Local (browser cookies)":
     # Show a button so you control when to connect during the demo
     if st.button("🔐 Connect using my browser session"):
         try:
