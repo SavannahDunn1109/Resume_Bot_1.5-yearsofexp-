@@ -61,16 +61,26 @@ def connect_with_browser_cookies():
             "Open the site in Chrome/Edge (non-incognito), sign in and pass MFA, then try again."
         )
 
-    ctx = ClientContext(SITE_URL)
+   ctx = None
 
-    # Inject Cookie header on every request the SDK makes
-    def _auth(request):
-        request.set_header("Cookie", f"FedAuth={fedauth}; rtFa={rtfa}")
-    ctx.authentication_context._authenticate = _auth
+if mode == "Local (browser cookies)":
+    # Show a button so you control when to connect during the demo
+    if st.button("🔐 Connect using my browser session"):
+        try:
+            with st.spinner("Connecting to SharePoint via browser session..."):
+                ctx = connect_with_browser_cookies()
+            st.session_state.ctx = ctx
+            st.success("✅ Connected to SharePoint (local browser session)")
+        except Exception as e:
+            st.error(f"❌ Connect failed: {e}")
+            st.info("Open the site in Chrome/Edge (non-incognito), sign in/MFA, then click again.")
 
-    # Fail fast if cookies are stale
-    ctx.web.get().execute_query()
-    return ctx
+    # Reuse connection if already established
+    ctx = st.session_state.get("ctx")
+
+elif mode == "Demo (no SharePoint)":
+    st.info("🎬 Demo mode: Not connecting to SharePoint. Use sample or uploaded resumes below.")
+
 
 
 # === Local-only cookie-based SharePoint connector ===
