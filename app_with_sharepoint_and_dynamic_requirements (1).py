@@ -1,12 +1,6 @@
-import sys, office365, requests, urllib3, cryptography
-st.sidebar.write("Python:", sys.version)
-st.sidebar.write("office365:", office365.__version__)
-st.sidebar.write("requests:", requests.__version__)
-st.sidebar.write("urllib3:", urllib3.__version__)
-st.sidebar.write("cryptography:", cryptography.__version__)
 import streamlit as st
 from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.user_credential import UserCredential
+from office365.runtime.auth.authentication_context import AuthenticationContext
 from office365.sharepoint.files.file import File
 import io
 import pandas as pd
@@ -15,45 +9,6 @@ from PyPDF2 import PdfReader
 from docx import Document
 import re
 from datetime import date
-# put this after your imports
-SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
-
-def connect_to_sharepoint():
-    username = st.secrets["sharepoint"]["username"]
-    password = st.secrets["sharepoint"]["password"]
-    ctx = ClientContext(SITE_URL).with_credentials(UserCredential(username, password))
-    ctx.load(ctx.web)
-    ctx.execute_query()
-    return ctx
-
-st.title("📄 Resume Bot")
-
-if st.button("🔌 Connect to SharePoint"):
-    try:
-        ctx = connect_to_sharepoint()
-        st.success("✅ Connected!")
-    except Exception as e:
-        st.error(f"❌ Connect failed: {e}")
-
-if st.button("🔌 Connect to SharePoint", disabled=st.session_state.ctx is not None):
-    try:
-        with st.spinner("Connecting..."):
-            st.session_state.ctx = connect_to_sharepoint()
-        st.success("✅ Connected to SharePoint")
-    except Exception as e:
-        st.error(f"❌ Connect failed: {e}")
-
-# ---------------------------------------
-# 2) LIST FILES (only after you connect)
-# ---------------------------------------
-def list_resumes():
-    folder_url = "/sites/Recruitin_
-
-
-# test quickly
-ctx.load(ctx.web)
-ctx.execute_query()
-st.write("✅ Connected to SharePoint")
 
 # ========== CONFIG ==========
 SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"
