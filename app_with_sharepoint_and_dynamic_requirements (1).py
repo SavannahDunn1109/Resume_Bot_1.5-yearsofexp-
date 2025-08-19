@@ -12,6 +12,66 @@ from datetime import date
 import office365
 import office365
 st.write("office365-rest-python-client version:", getattr(office365, "__version__", "unknown"))
+# === Local-only cookie-based SharePoint connector ===
+# Use this ONLY when running locally on your laptop after you’ve signed in to SharePoint in Chrome/Edge.
+import browser_cookie3
+from office365.sharepoint.client_context import ClientContext
+
+SITE_URL = "https://eleven090.sharepoint.com/sites/Recruiting"  # <- keep your real site url
+
+def _get_fedauth_rtfa():
+    """Read FedAuth / rtFa cookies from Chrome or Edge for SharePoint."""
+    def find(cj):
+        fedauth = rtfa = None
+        for c in cj:
+            if c.domain.endswith("sharepoint.com"):
+                n = c.name.lower()
+                if n == "fedauth":
+                    fedauth = c.value
+                elif n == "rtfa":
+                    rtfa = c.value
+        return fedauth, rtfa
+
+    # Try Chrome then Edge
+    try:
+        cj = browser_cookie3.chrome(domain_name=".sharepoint.com")
+        f, r = find(cj)
+        if f and r:
+            return f, r
+    except Exception:
+        pass
+    try:
+        cj = browser_cookie3.edge(domain_name=".sharepoint.com")
+        f, r = find(cj)
+        if f and r:
+            return f, r
+    except Exception:
+        pass
+    return None, None
+
+def connect_with_browser_cookies():
+    """
+    Reuse your signed-in browser session (MFA already done).
+    Run this locally only. Must use the same OS user & a normal (non-incognito) window.
+    """
+    fedauth, rtfa = _get_fedauth_rtfa()
+    if not (fedauth and rtfa):
+        raise RuntimeError(
+            "No SharePoint cookies found.\n"
+            "Open the site in Chrome/Edge (non-incognito), sign in and pass MFA, then try again."
+        )
+
+    ctx = ClientContext(SITE_URL)
+
+    # Inject Cookie header on every request the SDK makes
+    def _auth(request):
+        request.set_header("Cookie", f"FedAuth={fedauth}; rtFa={rtfa}")
+    ctx.authentication_context._authenticate = _auth
+
+    # Fail fast if cookies are stale
+    ctx.web.get().execute_query()
+    return ctx
+
 
 # === Local-only cookie-based SharePoint connector ===
 # Works when you run locally and are already signed in to SharePoint in Chrome/Edge.
