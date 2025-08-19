@@ -16,6 +16,8 @@ PyPDF2
 python-docx
 pandas
 
+browser-cookie3==0.19.1
+
 
 
 
